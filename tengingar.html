@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="is">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tengingar · Evrópuleikir</title>
+<link rel="stylesheet" href="still.css">
+<style>
+.thrautaval{display:flex;flex-wrap:wrap;gap:8px}
+.thrautaval button{border:2px solid var(--line);background:var(--card);border-radius:10px;padding:8px 12px;font-weight:700;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:8px}
+.thrautaval button[aria-pressed="true"]{border-color:var(--ink)}
+.thrautaval button.leyst::after{content:"✓";color:var(--rett);font-weight:800}
+.bord{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.reitur{min-height:72px;border:0;border-radius:10px;background:#e2e7ec;font-weight:800;font-size:clamp(12px,2.4vw,16px);padding:6px;cursor:pointer;overflow-wrap:anywhere;hyphens:auto;transition:transform .1s}
+.reitur[aria-pressed="true"]{background:#3d4a5a;color:#fff}
+.reitur:active{transform:scale(.96)}
+.leystur{grid-column:1 / -1;border-radius:10px;padding:12px;text-align:center;display:flex;flex-direction:column;gap:2px}
+.leystur b{font-family:var(--display);font-size:18px;text-transform:uppercase;letter-spacing:.04em}
+.leystur span{font-size:15px}
+.g1{background:var(--g1)} .g2{background:var(--g2)} .g3{background:var(--g3)} .g4{background:var(--g4)}
+.mistok{display:flex;gap:6px;justify-content:center;align-items:center;font-weight:700;color:var(--muted)}
+.mistok i{width:14px;height:14px;border-radius:50%;background:#3d4a5a;display:inline-block}
+.mistok i.farid{background:var(--line)}
+@keyframes hrista{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.hrista{animation:hrista .3s 2}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="haus"><a class="heim" href="index.html">← Allir leikir</a><nav class="svaedaval" id="svaedaval" aria-label="Svæði"></nav></header>
+  <div class="leikhaus">
+    <h1>Tengingar</h1>
+    <p>Veldu fjögur orð sem eiga eitthvað sameiginlegt og ýttu á <b>Senda</b>. Þú mátt gera fjögur mistök.</p>
+  </div>
+  <nav class="thrautaval" id="thrautaval" aria-label="Þrautir"></nav>
+  <section class="spjald" style="display:flex;flex-direction:column;gap:16px">
+    <div class="bord" id="bord"></div>
+    <div class="mistok" id="mistok"></div>
+    <p class="skilabod" id="skilabod" aria-live="polite"></p>
+    <div class="takkar">
+      <button class="takki ljos" id="stokka" type="button">Stokka</button>
+      <button class="takki ljos" id="afvelja" type="button">Afvelja</button>
+      <button class="takki" id="senda" type="button" disabled>Senda</button>
+    </div>
+  </section>
+</div>
+<script src="gogn.js"></script>
+<script src="sameiginlegt.js"></script>
+<script>
+let thraut, leystir, eftir, valin, mistok, buid;
+const MAX = 4;
+const $ = id => document.getElementById(id);
+
+function thrautir() { return TENGINGAR.filter(iSvaedi); }
+
+function synaVal() {
+  const leystar = GEYMSLA.lesa("tengingar-leystar", []);
+  $("thrautaval").innerHTML = thrautir().map(t =>
+    `<button type="button" data-id="${t.id}" aria-pressed="${thraut && t.id === thraut.id}" class="${leystar.includes(t.id) ? "leyst" : ""}">
+      <span class="merki ${t.svaedi}">${SVAEDI[t.svaedi].stutt}</span>${t.titill}</button>`).join("");
+}
+
+function byrja(id) {
+  const listi = thrautir();
+  thraut = listi.find(t => t.id === id) || listi[0];
+  leystir = []; valin = []; mistok = 0; buid = false;
+  eftir = stokka(thraut.flokkar.flatMap(f => f.ord.map(o => ({ ord: o, flokkur: f }))));
+  $("skilabod").textContent = ""; $("skilabod").className = "skilabod";
+  synaVal(); teikna();
+}
+
+function teikna() {
+  const b = $("bord");
+  b.innerHTML = leystir.map(f =>
+    `<div class="leystur g${f.erfidleiki}"><b>${f.heiti}</b><span>${f.ord.join(", ")}</span></div>`).join("") +
+    eftir.map((x, i) => `<button type="button" class="reitur" data-i="${i}" aria-pressed="${valin.includes(i)}" ${buid ? "disabled" : ""}>${x.ord}</button>`).join("");
+  $("mistok").innerHTML = "Mistök eftir: " + Array.from({ length: MAX }, (_, i) => `<i class="${i < mistok ? "farid" : ""}"></i>`).join("");
+  $("senda").disabled = valin.length !== 4 || buid;
+  $("stokka").disabled = $("afvelja").disabled = buid;
+}
+
+$("bord").addEventListener("click", e => {
+  const r = e.target.closest(".reitur"); if (!r || buid) return;
+  const i = +r.dataset.i;
+  if (valin.includes(i)) valin = valin.filter(x => x !== i);
+  else if (valin.length < 4) valin.push(i);
+  teikna();
+});
+
+$("afvelja").onclick = () => { valin = []; teikna(); };
+$("stokka").onclick = () => {
+  const v = valin.map(i => eftir[i]);
+  eftir = stokka(eftir);
+  valin = v.map(x => eftir.indexOf(x));
+  teikna();
+};
+
+$("senda").onclick = () => {
+  const val = valin.map(i => eftir[i]);
+  const f = val[0].flokkur;
+  const msg = $("skilabod");
+  if (val.every(x => x.flokkur === f)) {
+    leystir.push(f);
+    eftir = eftir.filter(x => x.flokkur !== f);
+    valin = [];
+    msg.textContent = "Rétt!"; msg.className = "skilabod rett";
+    if (leystir.length === 4) {
+      buid = true;
+      msg.textContent = mistok === 0 ? "Fullkomið! Engin mistök." : `Vel gert! Þrautin er leyst. Fjöldi mistaka: ${mistok}.`;
+      const l = GEYMSLA.lesa("tengingar-leystar", []);
+      if (!l.includes(thraut.id)) { l.push(thraut.id); GEYMSLA.skrifa("tengingar-leystar", l); }
+      synaVal();
+    }
+  } else {
+    mistok++;
+    const flest = Math.max(...thraut.flokkar.map(fl => val.filter(x => x.flokkur === fl).length));
+    msg.textContent = flest === 3 ? "Einu orði frá!" : "Ekki rétt.";
+    msg.className = "skilabod rangt";
+    $("bord").classList.remove("hrista"); void $("bord").offsetWidth; $("bord").classList.add("hrista");
+    if (mistok >= MAX) {
+      buid = true;
+      thraut.flokkar.forEach(fl => { if (!leystir.includes(fl)) leystir.push(fl); });
+      eftir = []; valin = [];
+      msg.textContent = "Mistökin kláruðust. Hér eru réttu flokkarnir.";
+    }
+  }
+  teikna();
+};
+
+$("thrautaval").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (b) byrja(b.dataset.id);
+});
+
+setjaSvaedaval(() => byrja());
+byrja();
+</script>
+</body>
+</html>
