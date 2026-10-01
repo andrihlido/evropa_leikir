@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="is">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pörun · Evrópuleikir</title>
+<link rel="stylesheet" href="../css/still.css">
+<style>
+.hamir{display:flex;justify-content:center;gap:6px;flex-wrap:wrap}
+.hamir button{border:2px solid var(--line);background:var(--card);border-radius:999px;padding:6px 14px;font-weight:800;font-size:14px;cursor:pointer}
+.hamir button[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.spil{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.kort{display:block;width:100%;aspect-ratio:4/3;position:relative;border:0;padding:0;background:none;cursor:pointer;perspective:600px}
+.kort .innri{position:absolute;inset:0;transition:transform .35s;transform-style:preserve-3d}
+.kort.opid .innri,.kort.parad .innri{transform:rotateY(180deg)}
+.hlid{position:absolute;inset:0;border-radius:10px;display:flex;align-items:center;justify-content:center;padding:6px;backface-visibility:hidden;font-weight:800;font-size:clamp(12px,2.6vw,17px);text-align:center;overflow-wrap:anywhere;line-height:1.2}
+.bak{background:repeating-linear-gradient(45deg,#2f5fb3 0 10px,#3a6cc2 10px 20px);color:#fff}
+.framhlid{background:var(--card);border:2px solid var(--line);transform:rotateY(180deg)}
+.kort[data-teg="land"] .framhlid{background:#17212d;color:#fff;border-color:#17212d}
+.kort.parad .framhlid{background:var(--rett-bg);color:var(--rett);border-color:var(--rett)}
+.kort:disabled{cursor:default}
+@media (max-width:520px){.spil{grid-template-columns:repeat(3,1fr)}}
+@media (prefers-reduced-motion:reduce){.kort .innri{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="haus"><a class="heim" href="../index.html">← Allir leikir</a><nav class="svaedaval" id="svaedaval" aria-label="Svæði"></nav></header>
+  <div class="leikhaus">
+    <h1>Pörun</h1>
+    <p>Snúðu tveimur spjöldum í einu og finndu pörin. Dökku spjöldin eru lönd.</p>
+  </div>
+  <section class="spjald" style="display:flex;flex-direction:column;gap:16px">
+    <div class="hamir" id="hamir">
+      <button type="button" data-h="hofudborg" aria-pressed="true">Land og höfuðborg</button>
+      <button type="button" data-h="takk" aria-pressed="false">Land og „takk“</button>
+      <button type="button" data-h="matur" aria-pressed="false">Land og matur</button>
+    </div>
+    <div class="stada" id="stada"></div>
+    <div class="spil" id="spil"></div>
+    <p class="skilabod" id="skilabod" aria-live="polite"></p>
+    <div class="takkar"><button class="takki" id="nyr" type="button">Nýr leikur</button></div>
+  </section>
+</div>
+<script src="../js/gogn.js"></script>
+<script src="../js/sameiginlegt.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const PORIN = 6;
+let hamur = "hofudborg", spjold, opin, leikir, parad, laest;
+
+function svar(l) {
+  if (hamur === "hofudborg") return l.hofudborg;
+  if (hamur === "takk") return l.takk;
+  return l.matur[0];
+}
+
+function veljaLond() {
+  let listi = stokka(landaListi(l => {
+    if (hamur === "hofudborg") return l.hofudborg && l.hofudborg !== l.nafn;
+    if (hamur === "matur") return l.matur.length > 0;
+    return true;
+  }));
+  const valin = [], notud = new Set();
+  for (const l of listi) {
+    const s = svar(l).toLowerCase();
+    if (notud.has(s)) continue;
+    notud.add(s); valin.push(l);
+    if (valin.length === PORIN) break;
+  }
+  return valin;
+}
+
+function nyrLeikur() {
+  const lond = veljaLond();
+  spjold = stokka(lond.flatMap(l => [
+    { id: l.id, teg: "land", texti: l.nafn },
+    { id: l.id, teg: "svar", texti: svar(l) }
+  ]));
+  opin = []; leikir = 0; parad = 0; laest = false;
+  $("skilabod").textContent = ""; $("skilabod").className = "skilabod";
+  $("spil").innerHTML = spjold.map((s, i) => `
+    <button type="button" class="kort" data-i="${i}" data-teg="${s.teg}" aria-label="Spjald ${i + 1}">
+      <span class="innri"><span class="hlid bak"></span><span class="hlid framhlid">${s.texti}</span></span>
+    </button>`).join("");
+  synaStodu();
+}
+
+function synaStodu() {
+  const met = GEYMSLA.lesa("porun-met-" + hamur, null);
+  $("stada").innerHTML = `<span>Leikir: <b>${leikir}</b></span><span>Pör: <b>${parad}</b> af ${spjold.length / 2}</span><span>Met: <b>${met === null ? "–" : met + " leikir"}</b></span>`;
+}
+
+$("spil").addEventListener("click", e => {
+  const k = e.target.closest(".kort");
+  if (!k || laest || k.classList.contains("opid") || k.classList.contains("parad")) return;
+  k.classList.add("opid");
+  k.setAttribute("aria-label", spjold[+k.dataset.i].texti);
+  opin.push(k);
+  if (opin.length < 2) return;
+  leikir++;
+  const [a, b] = opin.map(x => spjold[+x.dataset.i]);
+  if (a.id === b.id && a.teg !== b.teg) {
+    opin.forEach(x => { x.classList.remove("opid"); x.classList.add("parad"); x.disabled = true; });
+    opin = []; parad++;
+    if (parad === spjold.length / 2) {
+      const met = GEYMSLA.lesa("porun-met-" + hamur, null);
+      if (met === null || leikir < met) GEYMSLA.skrifa("porun-met-" + hamur, leikir);
+      $("skilabod").textContent = `Öll pörin fundin í ${leikir} leikjum!`;
+      $("skilabod").className = "skilabod rett";
+    }
+  } else {
+    laest = true;
+    setTimeout(() => {
+      opin.forEach(x => { x.classList.remove("opid"); x.setAttribute("aria-label", "Spjald " + (+x.dataset.i + 1)); });
+      opin = []; laest = false;
+    }, 1000);
+  }
+  synaStodu();
+});
+
+$("hamir").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  hamur = b.dataset.h;
+  document.querySelectorAll("#hamir button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  nyrLeikur();
+});
+$("nyr").onclick = nyrLeikur;
+
+setjaSvaedaval(nyrLeikur);
+nyrLeikur();
+</script>
+</body>
+</html>

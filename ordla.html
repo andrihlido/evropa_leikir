@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="is">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orðla · Evrópuleikir</title>
+<link rel="stylesheet" href="../css/still.css">
+<style>
+.grind{display:grid;grid-template-rows:repeat(6,1fr);gap:6px;width:min(100%,330px);margin:0 auto}
+.lina{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.stafur{aspect-ratio:1;border:2px solid var(--line);border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:clamp(22px,7vw,32px);text-transform:uppercase;background:var(--card)}
+.stafur.fullt{border-color:#8a96a5}
+.stafur.rett,.lykill.rett{background:var(--rett);border-color:var(--rett);color:#fff}
+.stafur.til,.lykill.til{background:#d4a017;border-color:#d4a017;color:#fff}
+.stafur.ekki,.lykill.ekki{background:#7b8794;border-color:#7b8794;color:#fff}
+.lyklabord{display:flex;flex-direction:column;gap:6px;align-items:center;width:100%}
+.lyklarod{display:flex;gap:4px;justify-content:center;width:100%}
+.lykill{flex:1 1 0;max-width:42px;min-width:0;height:52px;border:0;border-radius:6px;background:#d6dde5;font-weight:800;font-size:clamp(13px,3.6vw,18px);cursor:pointer;padding:0}
+.lykill.breidur{max-width:76px;flex:1.6 1 0;font-size:13px}
+.visbending{text-align:center;color:var(--muted);font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="haus"><a class="heim" href="../index.html">← Allir leikir</a><nav class="svaedaval" id="svaedaval" aria-label="Svæði"></nav></header>
+  <div class="leikhaus">
+    <h1>Orðla</h1>
+    <p>Giskaðu á fimm stafa orð úr bókinni. <b style="color:var(--rett)">Grænn</b> stafur er á réttum stað, <b style="color:#b8860b">gulur</b> er í orðinu en á röngum stað og <b style="color:#5a6676">grár</b> er ekki í orðinu.</p>
+  </div>
+  <section class="spjald" style="display:flex;flex-direction:column;gap:16px">
+    <div class="stada" id="stada"></div>
+    <div class="grind" id="grind"></div>
+    <p class="visbending" id="visbending"></p>
+    <p class="skilabod" id="skilabod" aria-live="polite"></p>
+    <div class="lyklabord" id="lyklabord"></div>
+    <div class="takkar">
+      <button class="takki ljos" id="vis" type="button">Sýna vísbendingu</button>
+      <button class="takki" id="nytt" type="button">Nýtt orð</button>
+    </div>
+  </section>
+</div>
+<script src="../js/gogn.js"></script>
+<script src="../js/sameiginlegt.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const RADIR = ["QWERTYUIOPÐ", "ASDFGHJKLÆ", "ÁÉÍÓÚÝÖ", "↵ZXCVBNMÞ⌫"];
+const LEYFDIR = new Set(RADIR.join("").replace(/[↵⌫]/g, ""));
+let rett, giskanir, nuna, buid, sidasta = null;
+
+function teiknaLyklabord() {
+  $("lyklabord").innerHTML = RADIR.map(r => `<div class="lyklarod">${[...r].map(s => {
+    if (s === "↵") return `<button type="button" class="lykill breidur" data-k="ENTER">Senda</button>`;
+    if (s === "⌫") return `<button type="button" class="lykill breidur" data-k="DEL" aria-label="Eyða">⌫</button>`;
+    return `<button type="button" class="lykill" data-k="${s}">${s}</button>`;
+  }).join("")}</div>`).join("");
+}
+
+function nyttOrd() {
+  let listi = ORDLA.filter(iSvaedi);
+  if (listi.length > 1 && sidasta) listi = listi.filter(o => o.ord !== sidasta);
+  rett = listi[Math.floor(Math.random() * listi.length)];
+  sidasta = rett.ord;
+  giskanir = []; nuna = ""; buid = false;
+  $("visbending").textContent = ""; $("skilabod").textContent = ""; $("skilabod").className = "skilabod";
+  teiknaLyklabord(); teikna(); synaStodu();
+}
+
+function litir(gisk, ord) {
+  const g = [...gisk], o = [...ord], nid = Array(5).fill("ekki");
+  const eftir = {};
+  o.forEach((s, i) => { if (g[i] === s) nid[i] = "rett"; else eftir[s] = (eftir[s] || 0) + 1; });
+  g.forEach((s, i) => { if (nid[i] !== "rett" && eftir[s]) { nid[i] = "til"; eftir[s]--; } });
+  return nid;
+}
+
+function teikna() {
+  let html = "";
+  for (let r = 0; r < 6; r++) {
+    const gisk = giskanir[r] || (r === giskanir.length ? nuna : "");
+    const l = giskanir[r] ? litir(giskanir[r], rett.ord) : null;
+    html += `<div class="lina">${Array.from({ length: 5 }, (_, i) => {
+      const s = [...gisk][i] || "";
+      return `<div class="stafur ${l ? l[i] : (s ? "fullt" : "")}">${s}</div>`;
+    }).join("")}</div>`;
+  }
+  $("grind").innerHTML = html;
+  // lita lyklaborð
+  const besta = {};
+  const rod = { ekki: 0, til: 1, rett: 2 };
+  giskanir.forEach(g => litir(g, rett.ord).forEach((c, i) => {
+    const s = [...g][i];
+    if (!besta[s] || rod[c] > rod[besta[s]]) besta[s] = c;
+  }));
+  document.querySelectorAll(".lykill").forEach(k => {
+    k.classList.remove("rett", "til", "ekki");
+    if (besta[k.dataset.k]) k.classList.add(besta[k.dataset.k]);
+  });
+}
+
+function synaStodu() {
+  const s = GEYMSLA.lesa("ordla", { leikir: 0, sigrar: 0, rod: 0 });
+  $("stada").innerHTML = `<span>Leikir: <b>${s.leikir}</b></span><span>Sigrar: <b>${s.sigrar}</b></span><span>Sigrar í röð: <b>${s.rod}</b></span>`;
+}
+
+function ljuka(sigur) {
+  buid = true;
+  const s = GEYMSLA.lesa("ordla", { leikir: 0, sigrar: 0, rod: 0 });
+  s.leikir++; if (sigur) { s.sigrar++; s.rod++; } else s.rod = 0;
+  GEYMSLA.skrifa("ordla", s); synaStodu();
+  const m = $("skilabod");
+  m.className = "skilabod " + (sigur ? "rett" : "rangt");
+  m.textContent = sigur ? `Rétt! Þú fannst orðið í ${giskanir.length}. tilraun.` : `Orðið var ${rett.ord}.`;
+  $("visbending").textContent = "Vísbending: " + rett.vis;
+}
+
+function slaInn(k) {
+  if (buid) return;
+  const m = $("skilabod");
+  if (k === "ENTER") {
+    if ([...nuna].length < 5) { m.textContent = "Orðið þarf að vera fimm stafir."; m.className = "skilabod rangt"; return; }
+    giskanir.push(nuna); nuna = ""; m.textContent = "";
+    teikna();
+    if (giskanir[giskanir.length - 1] === rett.ord) ljuka(true);
+    else if (giskanir.length === 6) ljuka(false);
+    return;
+  }
+  if (k === "DEL") { nuna = [...nuna].slice(0, -1).join(""); teikna(); return; }
+  if (LEYFDIR.has(k) && [...nuna].length < 5) { nuna += k; teikna(); }
+}
+
+$("lyklabord").addEventListener("click", e => { const b = e.target.closest(".lykill"); if (b) slaInn(b.dataset.k); });
+document.addEventListener("keydown", e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "Enter") { e.preventDefault(); slaInn("ENTER"); }
+  else if (e.key === "Backspace") slaInn("DEL");
+  else if (e.key.length === 1) slaInn(e.key.toLocaleUpperCase("is"));
+});
+$("vis").onclick = () => { $("visbending").textContent = "Vísbending: " + rett.vis; };
+$("nytt").onclick = () => { $("nytt").blur(); nyttOrd(); };
+
+setjaSvaedaval(nyttOrd);
+nyttOrd();
+</script>
+</body>
+</html>
